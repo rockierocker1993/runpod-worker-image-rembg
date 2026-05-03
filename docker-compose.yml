@@ -1,0 +1,29 @@
+services:
+  worker:
+    build: .
+    env_file: .env
+    volumes:
+      - ./models:/models:ro
+    environment:
+      # Storage Configuration
+      - INPUT_STORAGE_MODE=${INPUT_STORAGE_MODE:-s3}
+      - INPUT_VOLUME_PATH=${INPUT_VOLUME_PATH:-/runpod-volume/inputs/}
+      - OUTPUT_STORAGE_MODE=${OUTPUT_STORAGE_MODE:-cloudflare}
+      - OUTPUT_VOLUME_PATH=${OUTPUT_VOLUME_PATH:-/runpod-volume/outputs/}
+      - DELETE_INPUT_AFTER_UPSCALE=${DELETE_INPUT_AFTER_UPSCALE:-false}
+      # S3 (input images)
+      - S3_BUCKET=${S3_BUCKET}
+      - S3_REGION=${S3_REGION:-us-east-1}
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      # Cloudflare Images (output)
+      - CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID}
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN}
+      # Database
+      - ENABLE_DATABASE=${ENABLE_DATABASE:-false}
+      - DATABASE_URL=${DATABASE_URL}
+      # Webhook
+      - WEBHOOK_CALLBACK_URL=${WEBHOOK_CALLBACK_URL}
+      - WEBHOOK_TIMEOUT_SECONDS=${WEBHOOK_TIMEOUT_SECONDS:-10}
+      - WEBHOOK_AUTH_TOKEN=${WEBHOOK_AUTH_TOKEN}

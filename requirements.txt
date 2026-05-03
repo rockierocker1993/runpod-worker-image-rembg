@@ -1,0 +1,16 @@
+# RunPod serverless
+runpod
+
+# Image processing & background removal
+Pillow
+rembg[gpu]
+
+# AWS S3
+boto3
+
+# HTTP
+requests
+
+# Database
+sqlalchemy
+psycopg2-binary
