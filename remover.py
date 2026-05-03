@@ -48,7 +48,7 @@ class ImageRemover:
             model_path = os.path.join(U2NET_HOME, '/') if not U2NET_HOME.endswith('/') else U2NET_HOME
             model_path = os.path.join(model_path, f"{model}.onnx")
             self._sessions[model] = new_session(
-                    "u2net_custom",
+                    model,
                     model_path=model_path
                 )
             logger.info("Loaded custom model: %s", model_path)
