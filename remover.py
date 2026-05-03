@@ -1,6 +1,8 @@
 """
 Rembg Image Background Remover.
+Supports built-in rembg models + custom ONNX model path.
 """
+import os
 import logging
 from PIL import Image
 from rembg import remove, new_session
@@ -22,8 +24,10 @@ VALID_MODELS = [
     "birefnet-hrsod",
     "birefnet-cod",
     "birefnet-massive",
-    "bria-rmbg",
+    "bria-rmbg"
 ]
+
+U2NET_HOME = os.environ.get("U2NET_HOME", "/runpod-volume/u2net-models/")
 
 
 class ImageRemover:
@@ -33,30 +37,33 @@ class ImageRemover:
     """
 
     def __init__(self):
-        """Initialize remover with empty session cache."""
         self._sessions = {}
 
     def _get_session(self, model: str):
-        """Load and cache rembg session for a given model."""
+        """
+        Load and cache rembg session.
+        """
+
         if model not in self._sessions:
-            self._sessions[model] = new_session(model)
-            logger.info("Loaded rembg session for model: %s", model)
+            model_path = os.path.join(U2NET_HOME, '/') if not U2NET_HOME.endswith('/') else U2NET_HOME
+            model_path = os.path.join(model_path, f"{model}.onnx")
+            self._sessions[model] = new_session(
+                    "u2net_custom",
+                    model_path=model_path
+                )
+            logger.info("Loaded custom model: %s", model_path)
+
         return self._sessions[model]
 
-    def remove_background(self, image: Image.Image, model: str = "u2net") -> Image.Image:
+    def remove_background(
+        self,
+        image: Image.Image,
+        model: str = "u2net"
+    ) -> Image.Image:
         """
         Remove background from image.
-
-        Args:
-            image: Input PIL Image (RGB)
-            model: Rembg model name (default: u2net)
-
-        Returns:
-            PIL Image with background removed (RGBA)
-
-        Raises:
-            ValueError: If model is not supported
         """
+
         if model not in VALID_MODELS:
             raise ValueError(
                 f"Unsupported model: {model}. Must be one of {VALID_MODELS}"
