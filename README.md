@@ -128,6 +128,7 @@ runpod-worker-image-rembg/
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
 │         7. Send Webhook Callback (Async)                     │
+│  if WEBHOOK_CALLBACK_URL && webhook_enabled (from input)     │
 │      POST to WEBHOOK_CALLBACK_URL with result                │
 └────────────────────────┬────────────────────────────────────┘
                          │
@@ -323,6 +324,8 @@ WEBHOOK_TIMEOUT_SECONDS=10
 WEBHOOK_AUTH_TOKEN=your-secret-token
 ```
 
+> Webhook hanya dikirim jika `WEBHOOK_CALLBACK_URL` di-set **dan** request tidak menonaktifkan via `webhook_enabled: false`.
+
 #### Logging (Optional)
 ```env
 LOG_LEVEL=INFO    # DEBUG, INFO, WARNING, ERROR
@@ -338,6 +341,7 @@ LOG_LEVEL=INFO    # DEBUG, INFO, WARNING, ERROR
 | `input.model` | string | No | `u2net` | Model rembg yang digunakan |
 | `input.output_format` | string | No | `png` | Output format: `png`, `jpg`, `jpeg`, `webp` |
 | `input.output_quality` | integer | No | 95 | Quality untuk lossy formats (1-100) |
+| `input.webhook_enabled` | boolean | No | `true` | Kirim webhook callback untuk job ini |
 
 **Notes**:
 - S3 mode: `input.image` = S3 object key (`folder/image.jpg`)
@@ -371,10 +375,13 @@ LOG_LEVEL=INFO    # DEBUG, INFO, WARNING, ERROR
   "input": {
     "image": "folder/photo.jpg",
     "model": "birefnet-portrait",
-    "output_format": "png"
+    "output_format": "png",
+    "webhook_enabled": true
   }
 }
 ```
+
+> Set `webhook_enabled: false` untuk menonaktifkan webhook callback pada job tertentu, meskipun `WEBHOOK_CALLBACK_URL` sudah dikonfigurasi di environment.
 
 ### Success Response
 
