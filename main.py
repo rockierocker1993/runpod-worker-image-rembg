@@ -301,16 +301,17 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _build_final_response(payload: dict, status: str) -> dict:
+def _build_final_response(payload: dict, status: str, webhook_enabled: bool = True) -> dict:
     """Attach status and webhook trigger info, then dispatch async callback when enabled."""
     response_payload = dict(payload)
     response_payload["status"] = status
     response_payload["error_message"] = response_payload.get("error") if status == "error" else None
 
-    webhook_triggered_at = _utc_now_iso() if WEBHOOK_CALLBACK_URL else None
+    should_trigger = webhook_enabled and bool(WEBHOOK_CALLBACK_URL)
+    webhook_triggered_at = _utc_now_iso() if should_trigger else None
     response_payload["webhook_triggered_at"] = webhook_triggered_at
 
-    if WEBHOOK_CALLBACK_URL:
+    if should_trigger:
         _trigger_webhook_async(response_payload)
 
     return response_payload
@@ -343,6 +344,7 @@ def handler(job: dict) -> dict:
     job_input: dict = job.get("input", {})
     runpod_job_id: str | None = job.get("id")
     db_enabled: bool = _to_bool(ENABLE_DATABASE)
+    webhook_enabled: bool = _to_bool(job_input.get("webhook_enabled", True))
 
     # --- Validate input ---
     image_key: str | None = job_input.get("image")
@@ -354,6 +356,7 @@ def handler(job: dict) -> dict:
                 "error": "Missing required field: image",
             },
             status="error",
+            webhook_enabled=webhook_enabled,
         )
 
     model: str = job_input.get("model", "u2net")
@@ -365,6 +368,7 @@ def handler(job: dict) -> dict:
                 "error": f"Unsupported model: {model}. Must be one of {VALID_MODELS}",
             },
             status="error",
+            webhook_enabled=webhook_enabled,
         )
 
     # Output format settings
@@ -381,6 +385,7 @@ def handler(job: dict) -> dict:
                 "error": f"Unsupported output_format: {output_format}. Must be one of {valid_formats}",
             },
             status="error",
+            webhook_enabled=webhook_enabled,
         )
     
     # Validate quality
@@ -392,6 +397,7 @@ def handler(job: dict) -> dict:
                 "error": f"Invalid output_quality: {output_quality}. Must be between 1-100",
             },
             status="error",
+            webhook_enabled=webhook_enabled,
         )
 
     logger.info("Job %s started | model=%s | image=%s | format=%s | quality=%s", runpod_job_id, model, image_key, output_format, output_quality)
@@ -400,7 +406,7 @@ def handler(job: dict) -> dict:
     source_path = None
     try:
         if INPUT_STORAGE_MODE == "volume":
-            image, source_path = _read_image_from_volume(image_key)
+            # image, source_path = _read_image_from_volume(image_key)
             logger.info("Job %s image loaded from volume | path=%s | size=%sx%s", 
                        runpod_job_id, source_path, image.size[0], image.size[1])
         else:  # s3
@@ -415,6 +421,7 @@ def handler(job: dict) -> dict:
                 "error": f"Image not found: {exc}",
             },
             status="error",
+            webhook_enabled=webhook_enabled,
         )
     except (BotoCoreError, ClientError) as exc:
         logger.exception("Job %s S3 download failed", runpod_job_id)
@@ -424,6 +431,7 @@ def handler(job: dict) -> dict:
                 "error": f"S3 download failed: {exc}",
             },
             status="error",
+            webhook_enabled=webhook_enabled,
         )
     except Exception as exc:
         logger.exception("Job %s image load failed", runpod_job_id)
@@ -433,6 +441,7 @@ def handler(job: dict) -> dict:
                 "error": f"Failed to load image: {exc}",
             },
             status="error",
+            webhook_enabled=webhook_enabled,
         )
 
     # --- Remove background ---
@@ -454,6 +463,7 @@ def handler(job: dict) -> dict:
                 "error": f"Background removal failed: {exc}",
             },
             status="error",
+            webhook_enabled=webhook_enabled,
         )
 
     # --- Save result (to Cloudflare or Volume) ---
@@ -475,6 +485,7 @@ def handler(job: dict) -> dict:
                 "error": f"Cloudflare upload failed: {exc}",
             },
             status="error",
+            webhook_enabled=webhook_enabled,
         )
     except Exception as exc:
         logger.exception("Job %s output save failed", runpod_job_id)
@@ -484,6 +495,7 @@ def handler(job: dict) -> dict:
                 "error": f"Failed to save output: {exc}",
             },
             status="error",
+            webhook_enabled=webhook_enabled,
         )
 
     # --- Delete input (optional) ---
@@ -529,6 +541,7 @@ def handler(job: dict) -> dict:
                     "database_enabled": db_enabled,
                 },
                 status="error",
+                webhook_enabled=webhook_enabled,
             )
     else:
         logger.info("Job %s DB insert skipped | enable_database=false", runpod_job_id)
@@ -550,7 +563,7 @@ def handler(job: dict) -> dict:
         "model": model,
     }
 
-    return _build_final_response(response_payload, status="success")
+    return _build_final_response(response_payload, status="success", webhook_enabled=webhook_enabled)
 
 
 if __name__ == "__main__":
