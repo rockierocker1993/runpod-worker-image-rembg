@@ -14,6 +14,7 @@ RunPod serverless worker untuk menghapus background gambar menggunakan rembg den
 - ✅ Model di-cache per session — tidak download ulang per request
 - ✅ Model dibaca dari RunPod Network Volume via `U2NET_HOME`
 - ✅ GPU acceleration via `rembg[gpu]` + CUDA 12.4 (CUDAExecutionProvider, no CPU fallback)
+- ✅ **Warming-up support** — request khusus untuk menjaga worker tetap aktif tanpa memproses gambar
 
 ## 🖥️ System Requirements
 
@@ -83,13 +84,20 @@ runpod-worker-image-rembg/
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                   1. Validate Input                          │
+│                   1. Warming-up Check                        │
+│         if image == "warming-up" → return immediately        │
+│              { status: "warming-up" } (no webhook)           │
+└────────────────────────┬────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   2. Validate Input                          │
 │     Check image, model, output_format, output_quality        │
 └────────────────────────┬────────────────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
-│         2. Load Image (S3 or Network Volume)                 │
+│         3. Load Image (S3 or Network Volume)                 │
 │   • S3 mode: _download_image_from_s3()                       │
 │   • Volume mode: _read_image_from_volume()                   │
 │                 → PIL Image (RGB)                            │
@@ -97,7 +105,7 @@ runpod-worker-image-rembg/
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
-│           3. Remove Background (GPU)                         │
+│           4. Remove Background (GPU)                         │
 │         ImageRemover.remove_background(image, model)         │
 │                                                              │
 │   • Session cached per model (no re-download per request)    │
@@ -108,26 +116,26 @@ runpod-worker-image-rembg/
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
-│       4. Save Result (Cloudflare or Network Volume)          │
+│       5. Save Result (Cloudflare or Network Volume)          │
 │   • Cloudflare mode: _upload_to_cloudflare() → URL           │
 │   • Volume mode: _save_image_to_volume() → Path              │
 └────────────────────────┬────────────────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
-│      5. Delete Input (Optional)                              │
+│      6. Delete Input (Optional)                              │
 │   if DELETE_INPUT_AFTER_UPSCALE: delete from S3/volume       │
 └────────────────────────┬────────────────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
-│         6. Save to Database (Optional)                       │
+│         7. Save to Database (Optional)                       │
 │      if db_enabled: save_rembg_image(metadata)               │
 └────────────────────────┬────────────────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
-│         7. Send Webhook Callback (Async)                     │
+│         8. Send Webhook Callback (Async)                     │
 │  if WEBHOOK_CALLBACK_URL && webhook_enabled (from input)     │
 │      POST to WEBHOOK_CALLBACK_URL with result                │
 └────────────────────────┬────────────────────────────────────┘
@@ -337,7 +345,7 @@ LOG_LEVEL=INFO    # DEBUG, INFO, WARNING, ERROR
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `input.image` | string | Yes | - | Image path/key (S3 key or volume path) |
+| `input.image` | string | Yes | - | Image path/key (S3 key or volume path), atau `"warming-up"` untuk warming-up request |
 | `input.model` | string | No | `u2net` | Model rembg yang digunakan |
 | `input.output_format` | string | No | `png` | Output format: `png`, `jpg`, `jpeg`, `webp` |
 | `input.output_quality` | integer | No | 95 | Quality untuk lossy formats (1-100) |
@@ -347,6 +355,7 @@ LOG_LEVEL=INFO    # DEBUG, INFO, WARNING, ERROR
 - S3 mode: `input.image` = S3 object key (`folder/image.jpg`)
 - Volume mode: `input.image` = relative path dari `INPUT_VOLUME_PATH`
 - PNG direkomendasikan — satu-satunya format yang mempertahankan transparansi
+- Gunakan `input.image: "warming-up"` untuk menjaga worker tetap aktif tanpa memproses gambar
 
 ### Daftar Model
 
@@ -382,6 +391,29 @@ LOG_LEVEL=INFO    # DEBUG, INFO, WARNING, ERROR
 ```
 
 > Set `webhook_enabled: false` untuk menonaktifkan webhook callback pada job tertentu, meskipun `WEBHOOK_CALLBACK_URL` sudah dikonfigurasi di environment.
+
+### Warming-up Request
+
+Kirim request khusus untuk menjaga worker tetap aktif (misalnya dari cron job). Worker akan return segera tanpa memproses gambar dan tanpa mengirim webhook.
+
+```json
+{
+  "input": {
+    "image": "warming-up"
+  }
+}
+```
+
+### Warming-up Response
+
+```json
+{
+  "status": "warming-up",
+  "job_id": "job-12345",
+  "error_message": null,
+  "webhook_triggered_at": null
+}
+```
 
 ### Success Response
 
