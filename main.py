@@ -415,7 +415,7 @@ def handler(job: dict) -> dict:
     source_path = None
     try:
         if INPUT_STORAGE_MODE == "volume":
-            # image, source_path = _read_image_from_volume(image_key)
+            image, source_path = _read_image_from_volume(image_key)
             logger.info("Job %s image loaded from volume | path=%s | size=%sx%s", 
                        runpod_job_id, source_path, image.size[0], image.size[1])
         else:  # s3
